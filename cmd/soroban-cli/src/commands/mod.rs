@@ -11,11 +11,14 @@ pub mod container;
 pub mod contract;
 pub mod env;
 pub mod events;
+pub mod fortune;
 pub mod global;
 pub mod keys;
+pub mod meme;
 pub mod network;
 pub mod plugin;
 pub mod snapshot;
+pub mod stats;
 pub mod tx;
 pub mod version;
 
@@ -121,6 +124,9 @@ impl Root {
             Cmd::Tx(tx) => tx.run(&self.global_args).await?,
             Cmd::Cache(cache) => cache.run()?,
             Cmd::Env(env) => env.run(&self.global_args)?,
+            Cmd::Fortune(fortune) => fortune.run()?,
+            Cmd::Stats(stats) => stats.run()?,
+            Cmd::Meme(meme) => meme.run()?,
         };
         Ok(())
     }
@@ -181,6 +187,15 @@ pub enum Cmd {
 
     /// Print version information
     Version(version::Cmd),
+
+    /// Get your blockchain fortune told 🔮
+    Fortune(fortune::Cmd),
+
+    /// Show fun statistics about your project 📊
+    Stats(stats::Cmd),
+
+    /// Generate crypto memes for maximum vibes 🚀
+    Meme(meme::Cmd),
 }
 
 #[derive(thiserror::Error, Debug)]
@@ -221,6 +236,15 @@ pub enum Error {
 
     #[error(transparent)]
     Env(#[from] env::Error),
+
+    #[error(transparent)]
+    Fortune(#[from] fortune::Error),
+
+    #[error(transparent)]
+    Stats(#[from] stats::Error),
+
+    #[error(transparent)]
+    Meme(#[from] meme::Error),
 }
 
 #[async_trait]
