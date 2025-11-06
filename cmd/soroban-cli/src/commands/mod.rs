@@ -16,9 +16,12 @@ pub mod global;
 pub mod keys;
 pub mod meme;
 pub mod network;
+pub mod notify;
+pub mod phone;
 pub mod plugin;
 pub mod snapshot;
 pub mod stats;
+pub mod sync;
 pub mod tx;
 pub mod version;
 
@@ -127,6 +130,9 @@ impl Root {
             Cmd::Fortune(fortune) => fortune.run()?,
             Cmd::Stats(stats) => stats.run()?,
             Cmd::Meme(meme) => meme.run()?,
+            Cmd::Sync(sync) => sync.run()?,
+            Cmd::Notify(notify) => notify.run()?,
+            Cmd::Phone(phone) => phone.run()?,
         };
         Ok(())
     }
@@ -196,6 +202,18 @@ pub enum Cmd {
 
     /// Generate crypto memes for maximum vibes 🚀
     Meme(meme::Cmd),
+
+    /// Sync data with mobile devices 📱
+    #[command(subcommand)]
+    Sync(sync::Cmd),
+
+    /// Send notifications to your phone 📲
+    #[command(subcommand)]
+    Notify(notify::Cmd),
+
+    /// Mobile phone integration 📱
+    #[command(subcommand)]
+    Phone(phone::Cmd),
 }
 
 #[derive(thiserror::Error, Debug)]
@@ -245,6 +263,15 @@ pub enum Error {
 
     #[error(transparent)]
     Meme(#[from] meme::Error),
+
+    #[error(transparent)]
+    Sync(#[from] sync::Error),
+
+    #[error(transparent)]
+    Notify(#[from] notify::Error),
+
+    #[error(transparent)]
+    Phone(#[from] phone::Error),
 }
 
 #[async_trait]
