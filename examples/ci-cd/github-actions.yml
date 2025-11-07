@@ -1,0 +1,151 @@
+name: Stellar Contract CI/CD
+
+on:
+  push:
+    branches: [ main, develop ]
+  pull_request:
+    branches: [ main ]
+
+env:
+  STELLAR_NETWORK: testnet
+  NOTIFICATION_WEBHOOK: ${{ secrets.NOTIFICATION_WEBHOOK }}
+
+jobs:
+  build-and-test:
+    runs-on: ubuntu-latest
+    
+    steps:
+      - name: 📥 Checkout code
+        uses: actions/checkout@v3
+      
+      - name: 🦀 Setup Rust
+        uses: actions-rs/toolchain@v1
+        with:
+          toolchain: stable
+          target: wasm32-unknown-unknown
+      
+      - name: 📦 Cache dependencies
+        uses: actions/cache@v3
+        with:
+          path: |
+            ~/.cargo/registry
+            ~/.cargo/git
+            target
+          key: ${{ runner.os }}-cargo-${{ hashFiles('**/Cargo.lock') }}
+      
+      - name: 🔨 Build contract
+        run: |
+          cargo build --release --target wasm32-unknown-unknown
+          echo "✅ Build complete"
+      
+      - name: 🧪 Run tests
+        run: |
+          cargo test
+          echo "✅ Tests passed"
+      
+      - name: 📊 Generate stats
+        run: |
+          stellar stats > stats.txt || echo "Stats unavailable"
+          cat stats.txt
+      
+      - name: 🔮 Get fortune
+        run: |
+          stellar fortune -t blockchain
+      
+      - name: 📲 Notify success
+        if: success()
+        run: |
+          stellar notify send \
+            -m "✅ Build & tests passed on ${{ github.ref_name }}" \
+            -t "CI Success" \
+            -p normal
+
+  deploy:
+    needs: build-and-test
+    runs-on: ubuntu-latest
+    if: github.ref == 'refs/heads/main'
+    
+    steps:
+      - name: 📥 Checkout code
+        uses: actions/checkout@v3
+      
+      - name: 🦀 Setup Rust
+        uses: actions-rs/toolchain@v1
+        with:
+          toolchain: stable
+          target: wasm32-unknown-unknown
+      
+      - name: 🔨 Build for deployment
+        run: |
+          cargo build --release --target wasm32-unknown-unknown
+      
+      - name: 🚀 Deploy to Stellar
+        id: deploy
+        run: |
+          CONTRACT_ID=$(stellar contract deploy \
+            --wasm target/wasm32-unknown-unknown/release/contract.wasm \
+            --network $STELLAR_NETWORK \
+            --source ${{ secrets.STELLAR_SECRET_KEY }} | \
+            grep -o 'C[A-Z0-9]\{55\}' || echo "DEPLOY_FAILED")
+          
+          echo "contract_id=$CONTRACT_ID" >> $GITHUB_OUTPUT
+          echo "✅ Deployed: $CONTRACT_ID"
+      
+      - name: 📱 Generate mobile QR
+        if: success()
+        run: |
+          stellar sync qr-code -a ${{ steps.deploy.outputs.contract_id }}
+      
+      - name: 🎉 Celebrate with meme
+        if: success()
+        run: |
+          stellar meme -t moon
+      
+      - name: 📲 Notify deployment success
+        if: success()
+        run: |
+          stellar notify send \
+            -m "🚀 Deployed to $STELLAR_NETWORK! Contract: ${{ steps.deploy.outputs.contract_id }}" \
+            -t "Deployment Success" \
+            -p high \
+            --tx-hash "${{ steps.deploy.outputs.contract_id }}"
+      
+      - name: 📲 Notify deployment failure
+        if: failure()
+        run: |
+          stellar notify send \
+            -m "❌ Deployment failed on ${{ github.ref_name }}" \
+            -t "Deployment Failed" \
+            -p urgent
+          
+          stellar meme -t rekt
+
+  scheduled-backup:
+    runs-on: ubuntu-latest
+    if: github.event_name == 'schedule'
+    
+    steps:
+      - name: 📥 Checkout code
+        uses: actions/checkout@v3
+      
+      - name: 📦 Backup Stellar data
+        run: |
+          stellar sync export -o ./stellar-backup
+      
+      - name: 💾 Upload backup artifact
+        uses: actions/upload-artifact@v3
+        with:
+          name: stellar-backup-${{ github.run_number }}
+          path: ./stellar-backup
+      
+      - name: 📲 Notify backup complete
+        run: |
+          stellar notify send \
+            -m "📦 Scheduled backup complete" \
+            -t "Backup Success" \
+            -p normal
+
+# Scheduled backup (daily at 2 AM UTC)
+on:
+  schedule:
+    - cron: '0 2 * * *'

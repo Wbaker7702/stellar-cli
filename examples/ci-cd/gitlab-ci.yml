@@ -1,0 +1,125 @@
+stages:
+  - build
+  - test
+  - deploy
+  - notify
+
+variables:
+  STELLAR_NETWORK: "testnet"
+  CARGO_HOME: "${CI_PROJECT_DIR}/.cargo"
+
+# Cache dependencies
+cache:
+  paths:
+    - .cargo/
+    - target/
+
+before_script:
+  - rustup target add wasm32-unknown-unknown
+
+# Build stage
+build:
+  stage: build
+  image: rust:latest
+  script:
+    - echo "🔨 Building contract..."
+    - cargo build --release --target wasm32-unknown-unknown
+    - stellar fortune -t blockchain || true
+  artifacts:
+    paths:
+      - target/wasm32-unknown-unknown/release/
+    expire_in: 1 hour
+
+# Test stage
+test:
+  stage: test
+  image: rust:latest
+  script:
+    - echo "🧪 Running tests..."
+    - cargo test
+    - stellar stats || true
+  after_script:
+    - |
+      if [ $CI_JOB_STATUS == 'success' ]; then
+        stellar notify send -m "✅ Tests passed" -p normal || true
+      else
+        stellar notify send -m "❌ Tests failed" -p urgent || true
+        stellar meme -t rekt || true
+      fi
+
+# Deploy to testnet
+deploy:testnet:
+  stage: deploy
+  image: rust:latest
+  only:
+    - develop
+  script:
+    - echo "🚀 Deploying to testnet..."
+    - |
+      CONTRACT_ID=$(stellar contract deploy \
+        --wasm target/wasm32-unknown-unknown/release/contract.wasm \
+        --network testnet \
+        --source $STELLAR_SECRET_KEY | \
+        grep -o 'C[A-Z0-9]\{55\}' || echo "FAILED")
+    
+    - echo "Deployed contract: $CONTRACT_ID"
+    - stellar sync qr-code -a "$CONTRACT_ID" || true
+  after_script:
+    - |
+      if [ $CI_JOB_STATUS == 'success' ]; then
+        stellar notify send \
+          -m "🚀 Deployed to testnet!" \
+          -t "Testnet Deploy" \
+          -p high || true
+        stellar meme -t moon || true
+      else
+        stellar notify send \
+          -m "❌ Testnet deployment failed" \
+          -p urgent || true
+      fi
+
+# Deploy to mainnet
+deploy:mainnet:
+  stage: deploy
+  image: rust:latest
+  only:
+    - main
+  when: manual
+  script:
+    - echo "🚀 Deploying to MAINNET..."
+    - stellar fortune -t blockchain
+    - read -p "Are you sure? [yes/no]: " confirm
+    - |
+      if [ "$confirm" = "yes" ]; then
+        CONTRACT_ID=$(stellar contract deploy \
+          --wasm target/wasm32-unknown-unknown/release/contract.wasm \
+          --network mainnet \
+          --source $STELLAR_SECRET_KEY | \
+          grep -o 'C[A-Z0-9]\{55\}' || echo "FAILED")
+        
+        echo "Deployed to mainnet: $CONTRACT_ID"
+      fi
+  after_script:
+    - |
+      if [ $CI_JOB_STATUS == 'success' ]; then
+        stellar notify send \
+          -m "🎉 MAINNET DEPLOYMENT SUCCESSFUL!" \
+          -t "Mainnet Deploy" \
+          -p urgent || true
+        stellar meme -t chad || true
+      fi
+
+# Scheduled backup
+backup:
+  stage: notify
+  only:
+    - schedules
+  script:
+    - echo "📦 Creating backup..."
+    - stellar sync export -o ./stellar-backup
+  artifacts:
+    paths:
+      - stellar-backup/
+    expire_in: 7 days
+  after_script:
+    - stellar notify send -m "📦 Backup complete" -p normal || true

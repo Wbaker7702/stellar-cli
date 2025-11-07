@@ -1,0 +1,20 @@
+STELLAR CLI EXPORT
+==================
+
+Export Time: 2025-11-06T02:33:00Z
+Version: 1.0
+Private Keys Included: NO
+
+Files:
+- config.json: Configuration data
+- networks.json: Network endpoints
+- public_keys.json: Public keys only
+
+To import on phone:
+1. Install Stellar mobile app
+2. Go to Settings > Import
+3. Select this folder
+
+SECURITY WARNING:
+This export contains public data only.
+Safe to share for read-only access.
